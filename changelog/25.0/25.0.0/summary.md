@@ -28,6 +28,7 @@
         - [Preparing a statement no longer starts an implicit transaction](#vtgate-prepare-no-implicit-tx)
         - [Stricter validation of SQL-level PREPARE statements](#vtgate-prepare-stricter-validation)
         - [Stricter PROXY protocol v1 header validation](#vtgate-proxy-protocol-v1-strictness)
+        - [`information_schema` queries with `IN` predicates on schema/table name columns](#vtgate-info-schema-in-routing)
     - **[Reparent](#minor-changes-reparent)**
         - [`EmergencyReparentShard` no longer waits on replicas that cannot win the election](#ers-lagging-relay-log-wait)
         - [`EmergencyReparentShard` can explicitly recover from split brain](#ers-allow-split-brain-promotion)
@@ -267,6 +268,14 @@ Specification-conformant v1 headers, as emitted by HAProxy, AWS load balancers, 
 **Impact**: Deployments whose proxy emits one of the forms above — most notably the nginx stream module proxying between IPv6 clients and IPv4 upstreams — will have those connections rejected before the MySQL handshake. Configure the proxy to emit specification-conformant headers (for nginx, listen on a matching address family or on a v4-mapped socket so addresses are rendered in IPv6 form).
 
 See [#20733](https://github.com/vitessio/vitess/pull/20733) for details.
+
+#### <a id="vtgate-info-schema-in-routing"/>`information_schema` queries with `IN` predicates on schema/table name columns</a>
+
+`information_schema` queries that filter `table_schema` or `table_name` with a single-element `IN` list (for example `WHERE table_name IN ('t')`) are now routed exactly like the equivalent `=` comparison: the query is sent to the keyspace the predicate names, the schema name is rewritten to the physical schema name, and table routing rules are honored. Previously such queries were not used for routing at all and could silently return an empty result when the keyspace name differs from the physical schema name.
+
+An `IN` list with multiple values on these columns cannot be resolved to a single keyspace at planning time, so it now fails with an explicit `VT12001` error instead of being sent unrouted. Queries that previously relied on such predicates passing through to the default keyspace must either split the query into one per value or use `=` / single-element `IN`.
+
+**Impact**: single-element `IN` queries that silently returned empty results now return correct rows; multi-value `IN` queries on `table_schema`/`table_name` that previously passed through unrouted now return an error.
 
 ### <a id="minor-changes-reparent"/>Reparent</a>
 

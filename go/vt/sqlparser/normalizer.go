@@ -454,7 +454,9 @@ func (nz *normalizer) decideBindVarName(lit *Literal, col *ColName, bval *queryp
 	return bvname
 }
 
-// rewriteInComparisons converts IN and NOT IN expressions to use list bind variables.
+// rewriteInComparisons converts IN and NOT IN expressions to use list bind
+// variables. A single-element IN gets a scalar bind variable instead, so the
+// tuple size stays visible to the planner, which needs it for routing.
 func (nz *normalizer) rewriteInComparisons(node *ComparisonExpr) {
 	if !nz.shouldParameterize() {
 		return
@@ -462,6 +464,13 @@ func (nz *normalizer) rewriteInComparisons(node *ComparisonExpr) {
 	tupleVals, ok := node.Right.(ValTuple)
 	if !ok {
 		return
+	}
+
+	if node.Operator == InOp && len(tupleVals) == 1 {
+		if newR := nz.normalizeComparisonWithBindVar(node.Left, tupleVals[0]); newR != nil {
+			node.Right = ValTuple{newR}
+			return
+		}
 	}
 
 	// Create a list bind variable for the tuple.

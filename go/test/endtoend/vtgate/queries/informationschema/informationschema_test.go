@@ -80,6 +80,26 @@ func TestInformationSchemaQuery(t *testing.T) {
 	utils.AssertSingleRowIsReturned(t, mcmp.VtConn, "table_schema = 'ks' and table_name = 't1'", "vt_ks")
 }
 
+func TestInformationSchemaQueryWithIN(t *testing.T) {
+	if clusterInstance.HasPartialKeyspaces {
+		t.Skip("test can randomly select one of the shards, and the shards are in different keyspaces")
+	}
+	mcmp, closer := start(t)
+	defer closer()
+
+	utils.AssertSingleRowIsReturned(t, mcmp.VtConn, "table_schema in ('ks')", "vt_ks")
+	utils.AssertSingleRowIsReturned(t, mcmp.VtConn, "table_schema in ('ks') and table_name in ('t1')", "vt_ks")
+	utils.AssertResultIsEmpty(t, mcmp.VtConn, "table_schema in ('NONE')")
+
+	for _, predicate := range []string{
+		"table_schema in ('ks', 'vt_ks')",
+		"table_name in ('t1', 't7_xxhash')",
+	} {
+		_, err := mcmp.VtConn.ExecuteFetch("SELECT table_schema FROM information_schema.tables WHERE "+predicate, 1000, true)
+		require.ErrorContains(t, err, "IN with more than a single value")
+	}
+}
+
 func TestInformationSchemaWithSubquery(t *testing.T) {
 	mcmp, closer := start(t)
 	defer closer()

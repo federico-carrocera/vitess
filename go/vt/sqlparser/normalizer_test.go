@@ -309,6 +309,20 @@ func TestNormalize(t *testing.T) {
 			"bv1": sqltypes.Int64BindVariable(1),
 		},
 	}, {
+		// single-element IN clause is parameterized with a scalar bindvar
+		in:      "select * from t where v1 in (1)",
+		outstmt: "select * from t where v1 in (:v1 /* INT64 */)",
+		outbv: map[string]*querypb.BindVariable{
+			"v1": sqltypes.Int64BindVariable(1),
+		},
+	}, {
+		// single-element NOT IN keeps the list bind variable
+		in:      "select * from t where v1 not in ('a')",
+		outstmt: "select * from t where v1 not in ::bv1",
+		outbv: map[string]*querypb.BindVariable{
+			"bv1": sqltypes.TestBindVariable([]any{"a"}),
+		},
+	}, {
 		// IN clause with vals
 		in:      "select * from t where v1 in (1, '2')",
 		outstmt: "select * from t where v1 in ::bv1",
